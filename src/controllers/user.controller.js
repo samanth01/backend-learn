@@ -3,6 +3,30 @@ import {ApiError} from "../utils/ApiErrors.js"
 import {User} from "../models/user.models.js"
 import {uploadOnCloudinary} from "../utils/cloudinary.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
+import jwt from 'jsonwebtoken'
+
+
+
+const generateRefreshTokenandAccessTokens = async(userId)=>{
+ 
+    try {
+        const user = await User.findById(userId)
+        if (!user) {
+            throw new ApiError(404, "User not found");
+        }
+        const accessToken = user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+
+
+        user.refreshToken = refreshToken
+        await user.save({validationBeforeSave:false})
+        return {accessToken, refreshToken}
+        
+    } catch (error) {
+        throw new ApiError(500, error.message || "Token generation failed")
+        
+    }
+}
 const registerUser = asyncHandler(async(req,res)=>{
     // res.status(200).json({
     //     message:"le baba jiiii"
@@ -112,26 +136,9 @@ const registerUser = asyncHandler(async(req,res)=>{
 
     return res.status(201).json(
         new ApiResponse(200, createdUser, "User created successfully"))
-
-})
-
-const generateRefreshTokenandAccessToken = async(userId)=>{
-
-    try {
-        const user = await User.findById(userId)
-        const accessToken = user.generateAccessToken
-        const refreshToken = user.generateRefreshToken
-
-
-        user.refreshToken = refreshToken
-        await user.save({validationBeforeSave:false})
-        return {accessToken, refreshToken}
         
-    } catch (error) {
-        throw new ApiError(500, "Token generation failed")
-        
-    }
-}
+    });
+    
 
 
 const loginUser = asyncHandler(async(req,res)=>{
@@ -144,11 +151,17 @@ const loginUser = asyncHandler(async(req,res)=>{
     //save refresh token in db
     //send access token and refresh token in response
 
-    const {email,username,  password} = req.body;
+    console.log(req.body);
+    const {email, username,  password} = req.body
 
-    if(!email || !username){
+    console.log(email)
+    if(!(username || email)){
         throw new ApiError(400, "Email or username is required")
     }
+
+
+
+
 
     const user = await User.findOne({
         $or:[
@@ -161,26 +174,29 @@ const loginUser = asyncHandler(async(req,res)=>{
         throw new ApiError(404, "User not found")
     }
 
-    const isPasswordCValid = await user.ispasswordCorrect(password)
+    const isPasswordValid = await user.isPasswordCorrect(password)
 
-    if(!isPasswordCValid){
+    if(!isPasswordValid){
         throw new ApiError(401, "Invalid password")
     }
-
-    const {refreshToken, accessToken}=await generateRefreshTokenandAccessToken(user._id)
+ 
+    const {accessToken, refreshToken}=await generateRefreshTokenandAccessTokens(user._id)
 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
 
+     
 
     const options = {
         httpOnly :true,
         secure:true
     }
 
-    return res.status(200)
+    return res
+    .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)  
-    .json(new ApiResponse(200,
+    .json(new ApiResponse(
+        200,
          {
         user: loggedInUser, accessToken, refreshToken
          },
