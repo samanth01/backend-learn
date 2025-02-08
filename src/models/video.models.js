@@ -28,7 +28,7 @@ const videoSchema = new mongoose.Schema(
             type:Number,
             default:0
         },
-        isPublishes:{
+        isPublished:{
             type:Boolean,
             default:true
         },
